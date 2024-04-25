@@ -29,5 +29,9 @@ __version__ = "{version}"
 log_level = "INFO"
 asyncio_mode = "auto"
 
+[project.scripts]
+run_laseralignmentlistener = "lsst.ts.interlockmonitor:execute_laser_alignment_listener"
+run_serialtemperaturescanner = "lsst.ts.interlockmonitor:execute_serial_temperature_scanner"
+
 [project.optional-dependencies]
 dev = ["documenteer[pipelines]"]

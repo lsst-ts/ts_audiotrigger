@@ -24,4 +24,9 @@ try:
 except ImportError:
     __version__ = "?"
 
-from .thermal import *
+from .monitor import *
+from .laser_alignment_listener import *
+from .read_serial_temp_scanner import *
+from .mock_sounddevice import *
+from .mock_thermal_sensor import *
+from .mock_pigpio import *
