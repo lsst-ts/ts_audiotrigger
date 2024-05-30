@@ -1,5 +1,5 @@
 ###################
-ts_interlockmonitor
+ts_audio_trigger
 ###################
 
 Code for handling enclosure monitoring for the TunableLaser.

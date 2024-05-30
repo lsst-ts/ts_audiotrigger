@@ -27,9 +27,6 @@ class MockThermalSensor:
                 self.data_dict[sensor] = data
     
     def read(self, amount: int = 0):
-         # auto generate temperatures
-        reading = f""
-
         # These will need to be in some configuration file
         generated_read_string = "something\n"
         for sensor in self.sensor_dict:
@@ -37,5 +34,7 @@ class MockThermalSensor:
         generated_read_string = generated_read_string + "\nsomething               "
         generated_read_string = generated_read_string.encode("ISO-8859-1")
         
+        if amount and len(generated_read_string >= amount):
+            return generated_read_string[:amount]
         return generated_read_string
             

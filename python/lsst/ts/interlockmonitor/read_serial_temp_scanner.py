@@ -1,4 +1,4 @@
-# This file is part of ts_tunablelaser.
+# This file is part of ts_audio_trigger.
 #
 # Developed for the Vera Rubin Observatory Telescope and Site Software.
 # This product includes software developed by the LSST Project

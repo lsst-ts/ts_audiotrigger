@@ -89,3 +89,4 @@ class LaserAlignmentTestCase(unittest.IsolatedAsyncioTestCase):
         #test relay status
         relay_status = await laser_task.get_relay_status()
         assert relay_status == RELAY_OFF
+        
