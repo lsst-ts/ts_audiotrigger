@@ -1,36 +1,48 @@
+sudo yum install wget
 sudo yum install python3.11-devel
 sudo yum install python3.11-pip
-sudo yum install portaudio
+sudo yum install portaudio (not found)
 sudo yum install usbutils
-sudo yum install inxi
+sudo yum install inxi (not found)
 sudo yum install gcc
-sudo yum install portaudio-devel
+sudo yum install portaudio-devel (not found)
 sudo yum install alsa-lib-devel
 sudo yum install pulseaudio
+sudo yum install git
 
-sudo dnf install python3.11-pip
 sudo dnf install python3.11-wheel
-sudo dnf upgrade python3-setuptools
 
 git clone https://github.com/joan2937/pigpio.git
 cd pigpio/
 git checkout develop
 make
 sudo make install
-sudo systemctl start pigpiod
-sudo systemctl status pigpiod.service
-
+sudo touch /dev/pigerr
+sudo cp /usr/local/lib/libpigpio* /usr/lib64
+sudo cp /usr/local/bin/pigpiod /usr/bin
+sudo pigpiod
 
 pip3.11 install matplotlib
 pip3.11 install pigpio
 pip3.11 install sounddevice
 pip3.11 install scipy
-pip3.11 install matplotlib
 pip3.11 install astropy
 pip3.11 install aiohttp
 pip3.11 install dds
-pip3.11 install pyaudio
 
+sudo yum install alsa-plugins-pulseaudio
+
+git clone https://github.com/PortAudio/portaudio.git
+cd portaudio
+./configure && make
+sudo make install
+cd ~
+echo "LD_LIBRARY_PATH=/usr/local/lib" >> .bashrc
+echo "export LD_LIBRARY_PATH" >> .bashrc
+source .bashrc
+sudo ldconfig
+
+pip3.11 install pyaudio
 
 cd ~
 git clone https://github.com/lsst-ts/ts_tcpip.git
@@ -39,16 +51,17 @@ git clone https://github.com/lsst-ts/ts_utils.git
 git clone https://github.com/lsst-ts/ts_xml.git
  
 
+
 cd ts_utils
-pip3.11 install ts_utils
+pip3.11 install .
 cd ../ts_xml
-pip3.11 install ts_xml
+pip3.11 install .
 cd ../ts_tcpip
-pip3.11 install ts_tcpip
+pip3.11 install .
 cd ../ts_audio_trigger
-pip3.11 install ts_audio_trigger
+pip3.11 install .
 cd ..
  
 
-sudo chown <user> /dev/ttyUSB0 
+sudo chown <user> /dev/ttyUSB0 <--- this is needed for serial read temp scan, adjust to whatever USB
 
