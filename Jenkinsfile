@@ -1,2 +1,2 @@
 @Library('JenkinsShared')_
-DevelopPipeline("ts-interlockmonitor", "", "lsst.ts.interlockmonitor", "--no-mypy")
+DevelopPipeline("ts-audiotrigger", "", "lsst.ts.audiotrigger", "--no-mypy")

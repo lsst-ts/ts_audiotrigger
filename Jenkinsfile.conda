@@ -1,2 +1,2 @@
 @Library('JenkinsShared')_
-CondaPipeline([], "ts-interlockmonitor", "lsst.ts.interlockmonitor")
+CondaPipeline([], "ts-audiotrigger", "lsst.ts.audiotrigger")

@@ -1,4 +1,4 @@
-# This file is part of ts_audio_trigger.
+# This file is part of ts_audiotrigger.
 #
 # Developed for the Vera Rubin Observatory Telescope and Site Software.
 # This product includes software developed by the LSST Project
@@ -20,25 +20,20 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-__all__ = ["LaserAlignmentListener", "execute_laser_alignment_listener"]
+__all__ = ["LaserAlignmentListener"]
 
 import asyncio
 import functools
 import logging
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pigpio
 import sounddevice as sd
 from lsst.ts import tcpip
 from scipy.fftpack import fft
-#from .mock_pigpio import MockPio
-#from .mock_sounddevice import MockSoundDevice
 
-RELAY_ON = 1
-RELAY_OFF = 0
-
-#TODO put back in mock stuff for unit testing
+from .enums import Relay
+from .mocks import MockPio, MockSoundDevice
 
 
 class LaserAlignmentListener(tcpip.OneClientServer):
@@ -66,6 +61,21 @@ class LaserAlignmentListener(tcpip.OneClientServer):
         sample frequency
     simulation_mode: `bool`, optional
         if class is being simulated
+
+    Attributes
+    ----------
+    log : `logging.Logger`
+    simulation_mode : `bool`
+    relay_gpio : `int`
+    configured : `bool`
+    input : `int`
+    output : `int`
+    sample_record_dur : `int`
+    mock_sd : MockSd`
+    fs : `int`
+    pi : `pi.Pi`
+    count_threshold : `int`
+    count : `int`
     """
 
     def __init__(
@@ -84,13 +94,12 @@ class LaserAlignmentListener(tcpip.OneClientServer):
         self.log = log
 
         self.simulation_mode = simulation_mode
-        if self.simulation_mode == False:
+        if not self.simulation_mode:
             super().__init__(
                 log=self.log,
                 host=host,
                 port=port,
                 connect_callback=None,
-                monitor_connection_interval=0,
                 name="",
                 encoding=encoding,
                 terminator=terminator,
@@ -102,11 +111,11 @@ class LaserAlignmentListener(tcpip.OneClientServer):
         self.input = input
         self.output = output
         self.sample_record_dur = sample_record_dur
-        #self.mock_sd = MockSoundDevice()
+        self.mock_sd = MockSoundDevice()
 
-        if self.simulation_mode == True:
+        if self.simulation_mode:
             if fs is None:
-                pass
+                self.fs = None
             else:
                 self.fs = fs
         else:
@@ -118,8 +127,8 @@ class LaserAlignmentListener(tcpip.OneClientServer):
 
         self.relay_gpio = 7
         self.configured = True
-        if self.simulation_mode == True:
-            pass
+        if self.simulation_mode:
+            self.pi = MockPio()
         else:
             self.pi = pigpio.pi()
 
@@ -128,8 +137,21 @@ class LaserAlignmentListener(tcpip.OneClientServer):
         self.count_threshold = 7  # 10
         self.count = 0
 
+    async def start(self, **kwargs):
+        await self.open_laser_interrupt()
+        self.start_laser_task = asyncio.create_task(
+            self.laser_alignment_task(self.sample_record_dur, self.fs)
+        )
+        await super().start(**kwargs)
+
+    async def close(self):
+        self.start_laser_task.cancel()
+        await self.close_laser_interrupt()
+        await super().close()
+
     async def amain(self):
         """Script amain"""
+        await self.start_task
         await self.open_laser_interrupt()
         await self.laser_alignment_task(self.sample_record_dur, self.fs)
 
@@ -143,19 +165,22 @@ class LaserAlignmentListener(tcpip.OneClientServer):
 
         loop = asyncio.get_running_loop()
 
-        if self.simulation_mode == True:
+        if self.simulation_mode:
             pass
         else:
             await loop.run_in_executor(
                 None,
                 functools.partial(
-                    sd.check_input_settings, device=self.input, samplerate=fs, channels=1
+                    sd.check_input_settings,
+                    device=self.input,
+                    samplerate=fs,
+                    channels=1,
                 ),
             )
         self.log.debug(f"Starting to record for {duration} seconds")
 
-        if self.simulation_mode == True:
-            data = 0 
+        if self.simulation_mode:
+            data = np.zeros(shape=(150, 2))
         else:
             data = await loop.run_in_executor(
                 None,
@@ -222,34 +247,6 @@ class LaserAlignmentListener(tcpip.OneClientServer):
             self.log.error(f"handle_data excepted: {e}")
             return False
 
-    def plot_data(self, data, fs, xf, yf, psd):
-        length = data.shape[0] / fs
-
-        plt.clf()
-        time = np.linspace(0.0, length, data.shape[0])
-        plt.subplot(1, 3, 1)
-        plt.plot(time, data[:, 0], label="Left channel")
-        plt.plot(time, data[:, 1], label="Right channel")
-        plt.xlim(0, 1e-2)
-        plt.xlabel("Time [s]")
-        plt.ylabel("Amplitude")
-
-        plt.subplot(1, 3, 2)
-        plt.plot(xf, psd, ".-")
-        plt.xlim(0, 1300)
-        plt.xlabel("Frequency (Hz)")
-        plt.ylabel("PSD [units TBD]")
-        plt.draw()
-        plt.pause(0.001)
-
-        plt.subplot(1, 3, 3)
-        plt.plot(xf, psd, ".-")
-        plt.xlim(900, 1100)
-        plt.xlabel("Frequency (Hz)")
-        plt.ylabel("PSD [units TBD]")
-        plt.draw()
-        plt.pause(0.001)
-
     async def set_relay(self, setting: int):
         if not self.configured and not self.pi.connected:
             await self.write_if_connected(
@@ -262,10 +259,10 @@ class LaserAlignmentListener(tcpip.OneClientServer):
         )
 
     async def set_relay_on(self):
-        await self.set_relay(RELAY_ON)
+        await self.set_relay(Relay.ON)
 
     async def set_relay_off(self):
-        await self.set_relay(RELAY_OFF)
+        await self.set_relay(Relay.OFF)
 
     async def open_laser_interrupt(self):
         await self.set_relay_off()
@@ -290,12 +287,10 @@ class LaserAlignmentListener(tcpip.OneClientServer):
             None, functools.partial(self.pi.read, self.relay_gpio)
         )
         return not pin_value
-    
+
     async def handle_interlock(self, data_result):
         if data_result and self.count > self.count_threshold - 1:
-            self.log.warning(
-                "Detected misalignment in audible safety circuit"
-            )
+            self.log.warning("Detected misalignment in audible safety circuit")
             await self.close_laser_interrupt()
             self.log.warning("Interlock sleeping for 10 seconds...")
             await asyncio.sleep(10)
@@ -303,9 +298,7 @@ class LaserAlignmentListener(tcpip.OneClientServer):
             await self.open_laser_interrupt()
             self.count = 0
         elif data_result:
-            self.log.info(
-                f"Experienced value above threshold {self.count+1} times"
-            )
+            self.log.info(f"Experienced value above threshold {self.count+1} times")
             self.count += 1
         else:
             self.count = 0
@@ -329,35 +322,3 @@ class LaserAlignmentListener(tcpip.OneClientServer):
         except Exception as e:
             await self.write_if_connected(f"LI: Exception: Main task excepted: {e}")
             self.log.exception(f"Main task excepted: {e}")
-
-
-async def start_laser_task(log):
-    laser_task = LaserAlignmentListener(log=log)
-    await laser_task.amain()
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, laser_task.amain)
-
-def execute_laser_alignment_listener():
-    """This a script for the raspberry pi running alongside the TunableLaser
-    CSC This script's purpose is to listen for 1kHz laser misalignment and
-    activate an interlock
-    """
-    logging.basicConfig(
-        format="%(asctime)s %(levelname)-8s %(message)s",
-        level=logging.DEBUG,
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
-    log = logging.getLogger(__name__)
-    log.propagate = True
-    asyncio.run(start_laser_task(log))
-
-
-    #laser_task = LaserAlignmentListener(log=log)
-    #loop = asyncio.new_event_loop()
-    #asyncio.set_event_loop(loop)
-    #loop.run_until_complete(laser_task.amain())
-    #asyncio.run(laser_task.amain(index=None))
-
-if __name__ == "__main__":
-    execute_laser_alignment_listener()

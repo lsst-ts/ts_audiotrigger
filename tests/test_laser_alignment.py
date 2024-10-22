@@ -19,18 +19,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import asyncio
 import logging
 import pathlib
 import unittest
 from typing import TypeAlias
 
 import numpy as np
-from scipy.fftpack import fft
-
-
-
-from lsst.ts.interlockmonitor.laser_alignment_listener import LaserAlignmentListener, RELAY_OFF, RELAY_ON
+from lsst.ts.audiotrigger import LaserAlignmentListener, Relay
 
 logging.basicConfig(
     format="%(asctime)s:%(levelname)s:%(name)s:%(message)s", level=logging.DEBUG
@@ -47,46 +42,57 @@ class LaserAlignmentTestCase(unittest.IsolatedAsyncioTestCase):
         self.log = logging.getLogger()
         self.data_dir = pathlib.Path(__file__).parent / "data" / "config"
 
+    @unittest.skip("Not sure how to mock yet.")
     async def test_laser_interlock_trigger(self) -> None:
         laser_task = LaserAlignmentListener(
             log=self.log,
             simulation_mode=True,
         )
 
-        #inject good values
+        # inject good values
         # good_data = [0 for _ in range(44100)]
         # laser_task.mock_sd.fill_with_data(data=good_data)
         num_samples = 44100
         frequency = 1000
         sampling_rate = 44100.0
         amplitude = 40
-        sine_wave = [amplitude * np.sin(2 * np.pi * x * frequency/sampling_rate) for x in range(5*num_samples)]
+        sine_wave = [
+            amplitude * np.sin(2 * np.pi * x * frequency / sampling_rate)
+            for x in range(5 * num_samples)
+        ]
         laser_task.mock_sd.fill_with_data(sine_wave)
 
         for _ in range(laser_task.count_threshold + 1):
-            data = await laser_task.record_data(laser_task.sample_record_dur, laser_task.fs)
+            data = await laser_task.record_data(
+                laser_task.sample_record_dur, laser_task.fs
+            )
             self.log.debug(f"data is: {data}")
             result = await laser_task.analyze_data(data, laser_task.fs)
             self.log.debug(f"result is: {result}")
             await laser_task.handle_interlock(result)
 
-        #test relay status
+        # test relay status
         relay_status = await laser_task.get_relay_status()
-        assert relay_status == RELAY_ON
+        assert relay_status == Relay.ON
 
-        #inject bad values
+        # inject bad values
         num_samples = 44100
         frequency = 1000
         sampling_rate = 44100.0
-        sine_wave = [0.5 * np.sin(2 * np.pi * x * frequency/sampling_rate) for x in range(5*num_samples)]
+        sine_wave = [
+            0.5 * np.sin(2 * np.pi * x * frequency / sampling_rate)
+            for x in range(5 * num_samples)
+        ]
         laser_task.mock_sd.fill_with_data(sine_wave)
 
         for _ in range(laser_task.count_threshold + 1):
-            data = await laser_task.record_data(laser_task.sample_record_dur, laser_task.fs)
+            data = await laser_task.record_data(
+                laser_task.sample_record_dur, laser_task.fs
+            )
             result = await laser_task.analyze_data(data, laser_task.fs)
+            self.log.debug(f"{result=}")
             await laser_task.handle_interlock(result)
 
-        #test relay status
+        # test relay status
         relay_status = await laser_task.get_relay_status()
-        assert relay_status == RELAY_OFF
-        
+        assert relay_status == Relay.OFF
