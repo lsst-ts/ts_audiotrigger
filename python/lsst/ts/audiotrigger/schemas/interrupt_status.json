@@ -3,7 +3,7 @@
     "$id": "https://github.com/lsst-ts/ts_audiotrigger/python/lsst/ts/audiotrigger/schemas/interrupt_status.json",
     "type": "object",
     "properties": {
-        "id": {"type": "string"},
-        "value": {"type": "boolean"}
+        "id": {"type": "string", "const": "interrupt_status"},
+        "value": {"type": "string", "enum": ["closed", "opened"]}
     }
 }

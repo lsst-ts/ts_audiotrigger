@@ -25,57 +25,72 @@ __all__ = ["LaserAlignmentListener"]
 import asyncio
 import functools
 import logging
+import pathlib
 
+import jsonschema
 import numpy as np
 import pigpio
 import sounddevice as sd
-from lsst.ts import tcpip
+from lsst.ts import tcpip, utils
 from scipy.fftpack import fft
 
+from .constants import THRESHOLD
 from .enums import Relay
 from .mocks import MockPio, MockSoundDevice
 
 
 class LaserAlignmentListener(tcpip.OneClientServer):
-    """This is the class that implements the laser alignment script.
+    """Implement the laser alignment script.
 
     Parameters
     ----------
     log : `logging.log`
-        log object
+        Log object
     port : `int`, optional
-        port that the server will be hosted on, default 1883
+        Port that the server will be hosted on, default 1883
     host : `str`, optional
         IP the server will be hosted on, default tcpip.DEFAULT_LOCALHOST
     encoding : `str`, optional
         Encoding used for the packets
-    terminator: `bytes`, optional
-        terminating character used for packets
-    sample_record_dur: `float`, optional
-        sample recording duration
-    input: `int`, optional
-        index of sd device input
-    output: `int`, optional
-        index of sd device output
-    fs: `int`, optional
-        sample frequency
-    simulation_mode: `bool`, optional
-        if class is being simulated
+    terminator : `bytes`, optional
+        Terminating character used for packets
+    sample_record_dur : `float`, optional
+        Sample recording duration
+    input : `int`, optional
+        Index of sound device input
+    output : `int`, optional
+        Index of sound device output
+    fs : `int`, optional
+        Sample frequency
+    simulation_mode : `bool`, optional
+        If class is being simulated
 
     Attributes
     ----------
     log : `logging.Logger`
+        Log instance.
     simulation_mode : `bool`
+        Is in simulation mode.
     relay_gpio : `int`
+        The gpio pin instance.
     configured : `bool`
+        Is the server configured.
     input : `int`
+        The audio input id for recording.
     output : `int`
+        The audio output id for playback.
     sample_record_dur : `int`
+        The amount of time to record the microphone.
     mock_sd : MockSd`
+        The mock sounddevice, only initialized in simulation mode.
     fs : `int`
+        The sample rate.
     pi : `pi.Pi`
+        The pi gpio daemon instance.
     count_threshold : `int`
+        The threshold to trigger the interlock.
     count : `int`
+        The amount of times the threshold has been reached.
     """
 
     def __init__(
@@ -94,6 +109,8 @@ class LaserAlignmentListener(tcpip.OneClientServer):
         self.log = log
 
         self.simulation_mode = simulation_mode
+        # Unit test avoids using the server component.
+        # TODO: DM-47286 Use server in mocking/simulation.
         if not self.simulation_mode:
             super().__init__(
                 log=self.log,
@@ -105,68 +122,79 @@ class LaserAlignmentListener(tcpip.OneClientServer):
                 terminator=terminator,
             )
 
-        self.relay_gpio = None
-        self.configured = False
-
         self.input = input
         self.output = output
         self.sample_record_dur = sample_record_dur
-        self.mock_sd = MockSoundDevice()
-
         if self.simulation_mode:
-            if fs is None:
-                self.fs = None
-            else:
-                self.fs = fs
+            self.mock_sd = MockSoundDevice()
+            self.fs = None
+            self.pi = MockPio()
         else:
             sd.default.device = (input, output)
             if fs is None:
                 self.fs = sd.query_devices(input)["default_samplerate"]
             else:
                 self.fs = fs
+            self.pi = pigpio.pi()
 
         self.relay_gpio = 7
         self.configured = True
-        if self.simulation_mode:
-            self.pi = MockPio()
-        else:
-            self.pi = pigpio.pi()
 
         # Declare how many iterations have to be
         # above the threshold to shut off the laser
-        self.count_threshold = 7  # 10
+        self.count_threshold = 7
         self.count = 0
+        self.error_validator = jsonschema.Validator(
+            pathlib.Path("../schemas/error.json")
+        )
+        self.set_interrupt_status_validator = jsonschema.Validator(
+            pathlib.Path("../schemas/set_interrupt_status.json")
+        )
+        self.interrupt_status_validator = jsonschema.Validator(
+            pathlib.Path("../schemas/interrupt_status.json")
+        )
+        self.start_laser_task = utils.make_done_future()
+
+    # TODO: DM-47286 Add configure method
 
     async def start(self, **kwargs):
+        """Start the laser alignment analysis task."""
         await self.open_laser_interrupt()
-        self.start_laser_task = asyncio.create_task(
-            self.laser_alignment_task(self.sample_record_dur, self.fs)
-        )
+        if not self.start_laser_task.done():
+            self.start_laser_task.cancel()
+            self.start_laser_task = asyncio.create_task(
+                self.laser_alignment_task(self.sample_record_dur, self.fs)
+            )
         await super().start(**kwargs)
 
     async def close(self):
-        self.start_laser_task.cancel()
+        """Stop the laser alignment analysis task."""
+        if not self.start_laser_task.done():
+            self.start_laser_task.cancel()
         await self.close_laser_interrupt()
         await super().close()
 
-    async def amain(self):
-        """Script amain"""
-        await self.start_task
-        await self.open_laser_interrupt()
-        await self.laser_alignment_task(self.sample_record_dur, self.fs)
-
     async def write_if_connected(self, str):
+        """Write if connected."""
         if self.connected:
-            self.write_str(str)
+            await self.write_json(str)
 
     async def record_data(self, duration, fs):
-        """Records sample data from sd device"""
+        """Records sample data from microphone.
+
+        Parameters
+        ----------
+        duration : `float`
+            The amount of time to record.
+        fs : `int`
+            The hertz of the sample.
+        """
         self.log.debug("Check input settings")
 
         loop = asyncio.get_running_loop()
 
         if self.simulation_mode:
-            pass
+            data = np.zeros(shape=(150, 2))
         else:
             await loop.run_in_executor(
                 None,
@@ -177,11 +205,6 @@ class LaserAlignmentListener(tcpip.OneClientServer):
                     channels=1,
                 ),
             )
-        self.log.debug(f"Starting to record for {duration} seconds")
-
-        if self.simulation_mode:
-            data = np.zeros(shape=(150, 2))
-        else:
             data = await loop.run_in_executor(
                 None,
                 functools.partial(
@@ -192,11 +215,25 @@ class LaserAlignmentListener(tcpip.OneClientServer):
                     blocking=True,
                 ),
             )
+        self.log.debug(f"Starting to record for {duration} seconds")
         return data
 
     async def analyze_data(self, data, fs):
+        """Analyze the data from the sample.
+
+        Parameters
+        ----------
+        data : `np.ndarray`
+            The numpy array data from the recording.
+        fs : `int`
+            Number of samples.
+
+        Returns
+        -------
+        `bool`
+            Hit the threshold.
+        """
         try:
-            """analyzes all sound data and determines if there is a problem"""
             # average the tracks
             a = data.T[0]
             self.log.debug(f"a: {a}")
@@ -225,7 +262,6 @@ class LaserAlignmentListener(tcpip.OneClientServer):
 
             # check if signal is detected
             # threshold is in sigma over the range of 950-1050 Hz
-            threshold = 10
 
             self.log.debug(
                 f"Median of frequency vals are {(np.median(xf[(xf > 995) * (xf < 1005)])):0.2f}"
@@ -238,20 +274,31 @@ class LaserAlignmentListener(tcpip.OneClientServer):
             )
 
             self.log.debug(f"Median value over range from 900-1000 Hz is {bkg:0.2E}")
-            condition = (psd_at_1kHz) > threshold * bkg
-            if condition:
-                return True
-            else:
-                return False
+            condition = (psd_at_1kHz) > THRESHOLD * bkg
+            return condition
         except Exception as e:
             self.log.error(f"handle_data excepted: {e}")
             return False
 
     async def set_relay(self, setting: int):
-        if not self.configured and not self.pi.connected:
-            await self.write_if_connected(
-                "LI: Error: Not configured properly before actuating relay"
-            )
+        """Set the relay.
+
+        Parameters
+        ----------
+        setting : `int`
+            Set the relay on or off.
+        """
+        if not self.pi.connected:
+            msg = {
+                "id": "error",
+                "code": 1,
+                "message": "Not configured properly before actuating relay.",
+            }
+            try:
+                self.error_validator.validate(msg)
+            except Exception:
+                raise
+            await self.write_if_connected(msg)
             raise ValueError("Not configured properly before actuating relay")
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(
@@ -259,36 +306,77 @@ class LaserAlignmentListener(tcpip.OneClientServer):
         )
 
     async def set_relay_on(self):
+        """Set the relay on."""
         await self.set_relay(Relay.ON)
 
     async def set_relay_off(self):
+        """Set the relay off."""
         await self.set_relay(Relay.OFF)
 
     async def open_laser_interrupt(self):
+        """Open the laser interrupt/interlock."""
         await self.set_relay_off()
         self.log.info("Laser interrupt opened")
-        await self.write_if_connected("LI: Opened")
+        msg = {"id": "set_interrupt_status", "value": "open"}
+        try:
+            self.set_interrupt_status_validator.validate(msg)
+        except Exception:
+            raise Exception("Msg not valid.")
+        await self.write_if_connected(msg)
 
     async def close_laser_interrupt(self):
+        """Close the laser interrupt/interlock."""
         await self.set_relay_on()
         self.log.info("Laser Interrupt Activated, laser propagation disabled")
-        await self.write_if_connected("LI: Closed")
+        msg = {"id": "set_interrupt_status", "value": "close"}
+        try:
+            self.set_interrupt_status_validator.validate(msg)
+        except Exception:
+            raise Exception("Msg not valid.")
+        await self.write_if_connected(msg)
 
     async def restart(self):
+        """Restart the laser interrupt."""
         self.log.info("Reset button pushed")
-        await self.write_if_connected("LI: Reset button pushed")
+        msg = {"id": "set_interrupt_status", "value": "reset"}
+        try:
+            self.set_interrupt_status_validator(msg)
+        except Exception:
+            raise Exception("Msg not valid.")
+        await self.write_if_connected(msg)
         await self.open_laser_interrupt()
 
     async def get_relay_status(self) -> bool:
+        """Get the relay status."""
         # bits are flipped since self.relay.value returns a 0
         # when it's able to propagate
         loop = asyncio.get_running_loop()
         pin_value = await loop.run_in_executor(
             None, functools.partial(self.pi.read, self.relay_gpio)
         )
+        match pin_value:
+            case 1:
+                value = "closed"
+            case 0:
+                value = "opened"
+            case _:
+                pass
+        msg = {"id": "interrupt_status", "value": value}
+        try:
+            self.interrupt_status_validator.validate(msg)
+        except Exception:
+            raise Exception("msg not valid.")
+        await self.write_if_connected(msg)
         return not pin_value
 
     async def handle_interlock(self, data_result):
+        """Handle the interlock.
+
+        Parameters
+        ----------
+        data_result : `bool`
+            Threshold hit.
+        """
         if data_result and self.count > self.count_threshold - 1:
             self.log.warning("Detected misalignment in audible safety circuit")
             await self.close_laser_interrupt()
@@ -306,6 +394,15 @@ class LaserAlignmentListener(tcpip.OneClientServer):
     async def laser_alignment_task(
         self, time: float | None = None, fs: float | None = None
     ):
+        """Record the data from the microphone and analyze it.
+
+        Parameters
+        ----------
+        time : `float`
+            Duration of sample.
+        fs : `float`
+            The number of samples per second.
+        """
         if time is None:
             time = self.sample_record_dur
         if fs is None:

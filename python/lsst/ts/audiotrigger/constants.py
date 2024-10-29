@@ -19,24 +19,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["Relay", "Fan"]
+__all__ = ["MAX_PI_GPIOS", "SLEEP", "THRESHOLD"]
 
-import enum
-
-
-class Relay(enum.IntEnum):
-    """Relay values."""
-
-    ON = 1
-    """Interlock disengaged."""
-    OFF = 0
-    """Interlock engaged."""
-
-
-class Fan(enum.IntEnum):
-    """Fan setting values."""
-
-    ON = 1
-    """Turn fan on."""
-    OFF = 0
-    """Turn fan off."""
+MAX_PI_GPIOS = 32
+"""Maximum number of pi GPIO pins."""
+SLEEP = 1
+"""Default sleep timer."""
+THRESHOLD = 10
+"""Threshold over which misalignment of laser beam occurs."""

@@ -26,30 +26,67 @@ from collections import OrderedDict
 
 import numpy as np
 
-MAX_PI_GPIOS = 32
+from .constants import MAX_PI_GPIOS
 
 
 class MockPio:
+    """Mock the gpio daemon client.
+
+    Attributes
+    ----------
+    gpios : `list` of `int`
+        List of valid gpio pin IDs.
+    """
+
     def __init__(self):
         self.gpios = [0 for _ in range(MAX_PI_GPIOS)]
         self._connected = True
 
     @property
     def connected(self):
+        """Is the client connected."""
         return self._connected
 
     def write(self, gpio: int, setting: int | bool):
+        """Write to a pin.
+
+        Parameters
+        ----------
+        gpio : `int`
+            GPIO pin ID.
+        setting : `int`
+            1 for active and 0 for inactive.
+        """
         if gpio not in range(MAX_PI_GPIOS):
             raise ValueError
         self.gpios[gpio] = setting
 
     def read(self, gpio: int):
+        """Read the pin.
+
+        Parameters
+        ----------
+        gpio : `int`
+            The GPIO pin ID.
+        """
         if gpio not in range(MAX_PI_GPIOS):
             raise ValueError
         return self.gpios[gpio]
 
 
 class MockSoundDevice:
+    """Mock the microphone.
+
+    Attributes
+    ----------
+    microphone_devicelist_dict : `dict`
+        Microphone configuration dictionary.
+    device_list : `list` of `dict`
+        The device list for audio.
+    data : `list` of `int`
+        The audio data.
+    """
+
     def __init__(self):
         self._default_device = (None, None)
 
@@ -71,6 +108,13 @@ class MockSoundDevice:
         self.data = [0 for _ in range(44100)]
 
     def query_devices(self, input: int):
+        """Query device list.
+
+        Parameters
+        ----------
+        input : `int`
+            The input id.
+        """
 
         if input not in range(len(self.device_list)):
             raise ValueError
@@ -85,6 +129,21 @@ class MockSoundDevice:
         extra_settings=None,
         samplerate=None,
     ):
+        """Check the input settings for validity.
+
+        Parameters
+        ----------
+        device : `int` or `str`
+            The device id.
+        channels : `int`
+            The channels to record.
+        dtype : `str` or `numpy.dtype`
+            The data type of the numpy array.
+        extra_settings : `dict`
+            Host API specific settings.
+        samplerate : `float`
+            The amount of samples taken per second.
+        """
         # if settings valid, do nothing
         # if not, raise exception
         pass
@@ -100,6 +159,27 @@ class MockSoundDevice:
         blocking=False,
         **kwargs,
     ):
+        """Record the data from the microphone.
+
+        Parameters
+        ----------
+        frames : `int`
+            The number of frames to record.
+        samplerate : `float`
+            The number of samples per second.
+        channels : `int`
+            The number of channels to record.
+        dtype : `str`
+            The data type of the numpy array.
+        out : `numpy.ndarray`
+            If provided, use the following array to store the data instead of
+            creating a new one.
+        mapping : `list`
+            List of channels to record, if given channels is ignored.
+        blocking : `bool`
+            If true, wait until recording is done; if false, return
+            immediately.
+        """
         returned_data = self.data
         if len(self.data) > frames:
             # data is too long
@@ -114,13 +194,41 @@ class MockSoundDevice:
         return generated_data
 
     def fill_with_random_data(self, rangelow, rangehigh, frames):
+        """Fill data with random values.
+
+        Parameters
+        ----------
+        rangelow : `int`
+            The minimum random value.
+        rangehigh : `int`
+            The maximum random value.
+        frames : `int`
+            The number of frames.
+        """
         self.data = [random.randrange(rangelow, rangehigh) for _ in range(frames)]
 
     def fill_with_data(self, data):
+        """Fill with passed through data.
+
+        Parameters
+        ----------
+        data : `dict`
+            Audio data.
+        """
         self.data = data
 
 
 class MockThermalSensor:
+    """Mock thermal sensor.
+
+    Attributes
+    ----------
+    sensor_dict : `OrderedDict`
+        Sensor name dictionary.
+    data_dict : `OrderedDict`
+        Sensor value dictionary.
+    """
+
     def __init__(self):
         self._inWaiting = 0
         self.sensor_dict = OrderedDict(
@@ -149,9 +257,19 @@ class MockThermalSensor:
         )
 
     def inWaiting(self):
+        """Return bytes in buffer."""
         return self._inWaiting
 
     def inject_data(self, data, dict_position=None):
+        """Inject data into dictionary.
+
+        Parameters
+        ----------
+        data : `dict`
+            The data.
+        dict_position : `str`
+            The index to inject.
+        """
         if dict_position:
             if dict_position in self.data_dict:
                 self.data_dict[dict_position] = data
@@ -162,6 +280,13 @@ class MockThermalSensor:
                 self.data_dict[sensor] = data
 
     def read(self, amount: int = 0):
+        """Read the data in buffer.
+
+        Parameters
+        ----------
+        amount : `int`
+            The amount of data to read.
+        """
         # These will need to be in some configuration file
         generated_read_string = "something\n"
         for sensor in self.sensor_dict:

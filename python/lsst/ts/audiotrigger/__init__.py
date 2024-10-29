@@ -1,4 +1,4 @@
-# This file is part of ts_interlockmonitor.
+# This file is part of ts_audiotrigger.
 #
 # Developed for Vera C. Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the Vera C. Rubin Project

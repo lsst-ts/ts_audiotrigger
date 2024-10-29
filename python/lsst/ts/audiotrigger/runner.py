@@ -1,9 +1,12 @@
 import argparse
 import asyncio
 import logging
+import pathlib
 
+import jsonschema
 from lsst.ts import tcpip, utils
 
+from .constants import SLEEP
 from .laser_alignment_listener import LaserAlignmentListener
 from .read_serial_temp_scanner import SerialTemperatureScanner
 
@@ -23,9 +26,13 @@ class Runner(tcpip.OneClientServer):
     Attributes
     ----------
     log : `logging.Logger`
+        Log instance.
     laser_alignment : `None`
+        Laser alignment instance.
     serial_scanner : `None`
+        Serial scanner instance.
     heartbeat_task : `asyncio.Future`
+        Heartbeat publisher task.
     """
 
     def __init__(self) -> None:
@@ -33,8 +40,12 @@ class Runner(tcpip.OneClientServer):
         self.laser_alignment = None
         self.serial_scanner = None
         self.heartbeat_task = utils.make_done_future()
+        self.validator = jsonschema.Validator(
+            schema=pathlib.Path("../schemas/heartbeat.json")
+        )
 
     def configure(self, config):
+        # TODO: DM-47286 Add configure method and schema
         pass
 
     async def start(self, **kwargs):
@@ -68,4 +79,9 @@ class Runner(tcpip.OneClientServer):
         """Send heartbeat message indicating liveness."""
         while True:
             msg = {"id": "heartbeat", "value": "alive"}
+            try:
+                self.validator.validate(msg)
+            except Exception:
+                pass
             await self.write_json(msg)
+            await asyncio.sleep(SLEEP)
