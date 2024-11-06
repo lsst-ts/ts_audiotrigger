@@ -1,7 +1,7 @@
-# This file is part of ts_interlockmonitor.
+# This file is part of ts_audiotrigger.
 #
-# Developed for Vera C. Rubin Observatory Telescope and Site Systems.
-# This product includes software developed by the Vera C. Rubin Project
+# Developed for the Vera Rubin Observatory Telescope and Site Software.
+# This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
 # for details of code ownership.
@@ -19,9 +19,24 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-try:
-    from .version import *
-except ImportError:
-    __version__ = "?"
+__all__ = ["Relay", "Fan"]
 
-from .thermal import *
+import enum
+
+
+class Relay(enum.IntEnum):
+    """Relay values."""
+
+    ON = 1
+    """Interlock disengaged."""
+    OFF = 0
+    """Interlock engaged."""
+
+
+class Fan(enum.IntEnum):
+    """Fan setting values."""
+
+    ON = 1
+    """Turn fan on."""
+    OFF = 0
+    """Turn fan off."""
