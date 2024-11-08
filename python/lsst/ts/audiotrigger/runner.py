@@ -40,7 +40,7 @@ class Runner(tcpip.OneClientServer):
         self.laser_alignment = None
         self.serial_scanner = None
         self.heartbeat_task = utils.make_done_future()
-        self.validator = jsonschema.Validator(
+        self.validator = jsonschema.Draft7Validator(
             schema=pathlib.Path("../schemas/heartbeat.json")
         )
 

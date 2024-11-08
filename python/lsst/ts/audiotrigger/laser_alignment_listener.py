@@ -144,13 +144,13 @@ class LaserAlignmentListener(tcpip.OneClientServer):
         # above the threshold to shut off the laser
         self.count_threshold = 7
         self.count = 0
-        self.error_validator = jsonschema.Validator(
+        self.error_validator = jsonschema.Draft7Validator(
             pathlib.Path("../schemas/error.json")
         )
-        self.set_interrupt_status_validator = jsonschema.Validator(
+        self.set_interrupt_status_validator = jsonschema.Draft7Validator(
             pathlib.Path("../schemas/set_interrupt_status.json")
         )
-        self.interrupt_status_validator = jsonschema.Validator(
+        self.interrupt_status_validator = jsonschema.Draft7Validator(
             pathlib.Path("../schemas/interrupt_status.json")
         )
         self.start_laser_task = utils.make_done_future()
