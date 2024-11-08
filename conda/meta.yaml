@@ -38,7 +38,7 @@ requirements:
     - ts-conda-build =0.4
   run:
     - python {{ python }}
-    - numpy =1.25
+    - numpy =1.26
     - scipy =1.11
     - pigpio =1.78
     - python-sounddevice =0.5
