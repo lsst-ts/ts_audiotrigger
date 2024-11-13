@@ -27,6 +27,7 @@ import functools
 import json
 import logging
 import pathlib
+from importlib import resources as impresources
 
 import jsonschema
 import numpy as np
@@ -35,6 +36,7 @@ import sounddevice as sd
 from lsst.ts import tcpip, utils
 from scipy.fftpack import fft
 
+from . import schemas
 from .constants import THRESHOLD
 from .enums import Relay
 from .mocks import MockPio, MockSoundDevice
@@ -146,13 +148,21 @@ class LaserAlignmentListener(tcpip.OneClientServer):
         self.count_threshold = 7
         self.count = 0
         self.error_validator = jsonschema.Draft7Validator(
-            json.load(pathlib.Path("../schemas/error.json"))
+            json.load(pathlib.Path(impresources.files("schemas") / "error.json").open())
         )
         self.set_interrupt_status_validator = jsonschema.Draft7Validator(
-            json.load(pathlib.Path("../schemas/set_interrupt_status.json"))
+            json.load(
+                pathlib.Path(
+                    impresources.files(schemas) / "set_interrupt_status.json"
+                ).open()
+            )
         )
         self.interrupt_status_validator = jsonschema.Draft7Validator(
-            json.load(pathlib.Path("../schemas/interrupt_status.json"))
+            json.load(
+                pathlib.Path(
+                    impresources.files(schemas) / "interrupt_status.json"
+                ).open()
+            )
         )
         self.start_laser_task = utils.make_done_future()
 

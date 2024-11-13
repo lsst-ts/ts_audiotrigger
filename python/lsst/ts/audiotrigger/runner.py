@@ -3,10 +3,12 @@ import asyncio
 import json
 import logging
 import pathlib
+from importlib import resources as impresources
 
 import jsonschema
 from lsst.ts import tcpip, utils
 
+from . import schemas
 from .constants import SLEEP
 from .laser_alignment_listener import LaserAlignmentListener
 from .read_serial_temp_scanner import SerialTemperatureScanner
@@ -42,7 +44,9 @@ class Runner(tcpip.OneClientServer):
         self.serial_scanner = None
         self.heartbeat_task = utils.make_done_future()
         self.validator = jsonschema.Draft7Validator(
-            schema=json.load(pathlib.Path("../schemas/heartbeat.json"))
+            schema=json.load(
+                pathlib.Path(impresources.files(schemas) / "heartbeat.json").open()
+            )
         )
 
     def configure(self, config):
