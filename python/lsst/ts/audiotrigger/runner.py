@@ -18,7 +18,11 @@ def execute_runner():
     """Execute the runner service."""
     parser = argparse.ArgumentParser()
     parser.parse_args()
-    Runner()
+    asyncio.run(amain())
+
+
+async def amain():
+    return Runner()
 
 
 class Runner(tcpip.OneClientServer):
@@ -48,6 +52,7 @@ class Runner(tcpip.OneClientServer):
                 pathlib.Path(impresources.files(schemas) / "heartbeat.json").open()
             )
         )
+        super().__init__(host=tcpip.LOCAL_HOST, port=8080, log=self.log)
 
     def configure(self, config):
         # TODO: DM-47286 Add configure method and schema
