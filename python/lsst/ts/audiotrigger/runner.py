@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import json
 import logging
 import pathlib
 
@@ -41,7 +42,7 @@ class Runner(tcpip.OneClientServer):
         self.serial_scanner = None
         self.heartbeat_task = utils.make_done_future()
         self.validator = jsonschema.Draft7Validator(
-            schema=pathlib.Path("../schemas/heartbeat.json")
+            schema=json.load(pathlib.Path("../schemas/heartbeat.json"))
         )
 
     def configure(self, config):
