@@ -10,7 +10,8 @@ from lsst.ts import tcpip, utils
 
 from . import schemas
 from .constants import SLEEP
-from .laser_alignment_listener import LaserAlignmentListener
+
+# from .laser_alignment_listener import LaserAlignmentListener
 from .read_serial_temp_scanner import SerialTemperatureScanner
 
 
@@ -66,12 +67,10 @@ class Runner(tcpip.OneClientServer):
         kwargs : `dict`
             Any arguments that can be passed to asyncio.create_server.
         """
-        self.laser_alignment = LaserAlignmentListener(log=self.log)
+        # self.laser_alignment = LaserAlignmentListener(log=self.log)
         self.serial_scanner = SerialTemperatureScanner(log=self.log)
         self.heartbeat_task = asyncio.ensure_future(self.heartbeat)
-        await asyncio.gather(
-            [self.laser_alignment.start_task, self.serial_scanner.start_task]
-        )
+        await asyncio.gather([self.serial_scanner.start_task])
         await super().start(kwargs=kwargs)
 
     async def close(self):
