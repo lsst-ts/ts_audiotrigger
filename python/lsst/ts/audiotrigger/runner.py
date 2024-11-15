@@ -70,7 +70,8 @@ class Runner(tcpip.OneClientServer):
         # self.laser_alignment = LaserAlignmentListener(log=self.log)
         self.serial_scanner = SerialTemperatureScanner(log=self.log)
         self.heartbeat_task = asyncio.ensure_future(self.heartbeat())
-        await asyncio.gather([self.serial_scanner.start_task])
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(self.serial_scanner.start_task)
         await super().start(kwargs=kwargs)
 
     async def close(self):
