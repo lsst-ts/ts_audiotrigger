@@ -1,2 +1,2 @@
 @Library('JenkinsShared')_
-CondaPipeline([], "ts-audiotrigger", "lsst.ts.audiotrigger", "no-arch")
+CondaPipeline([], "ts-audiotrigger", "lsst.ts.audiotrigger", "noarch")

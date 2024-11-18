@@ -1,0 +1,1 @@
+Remove dash from noarch argument.

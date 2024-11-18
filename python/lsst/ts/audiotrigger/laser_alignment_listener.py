@@ -24,8 +24,10 @@ __all__ = ["LaserAlignmentListener"]
 
 import asyncio
 import functools
+import json
 import logging
 import pathlib
+from importlib import resources as impresources
 
 import jsonschema
 import numpy as np
@@ -34,6 +36,7 @@ import sounddevice as sd
 from lsst.ts import tcpip, utils
 from scipy.fftpack import fft
 
+from . import schemas
 from .constants import THRESHOLD
 from .enums import Relay
 from .mocks import MockPio, MockSoundDevice
@@ -96,7 +99,7 @@ class LaserAlignmentListener(tcpip.OneClientServer):
     def __init__(
         self,
         log: logging.Logger | None = None,
-        port: int | None = 1883,
+        port: int | None = 18840,
         host: str | None = tcpip.DEFAULT_LOCALHOST,
         encoding: str = tcpip.DEFAULT_ENCODING,
         terminator: bytes = tcpip.DEFAULT_TERMINATOR,
@@ -144,14 +147,22 @@ class LaserAlignmentListener(tcpip.OneClientServer):
         # above the threshold to shut off the laser
         self.count_threshold = 7
         self.count = 0
-        self.error_validator = jsonschema.Validator(
-            pathlib.Path("../schemas/error.json")
+        self.error_validator = jsonschema.Draft7Validator(
+            json.load(pathlib.Path(impresources.files("schemas") / "error.json").open())
         )
-        self.set_interrupt_status_validator = jsonschema.Validator(
-            pathlib.Path("../schemas/set_interrupt_status.json")
+        self.set_interrupt_status_validator = jsonschema.Draft7Validator(
+            json.load(
+                pathlib.Path(
+                    impresources.files(schemas) / "set_interrupt_status.json"
+                ).open()
+            )
         )
-        self.interrupt_status_validator = jsonschema.Validator(
-            pathlib.Path("../schemas/interrupt_status.json")
+        self.interrupt_status_validator = jsonschema.Draft7Validator(
+            json.load(
+                pathlib.Path(
+                    impresources.files(schemas) / "interrupt_status.json"
+                ).open()
+            )
         )
         self.start_laser_task = utils.make_done_future()
 

@@ -1,13 +1,17 @@
 import argparse
 import asyncio
+import json
 import logging
 import pathlib
+from importlib import resources as impresources
 
 import jsonschema
 from lsst.ts import tcpip, utils
 
+from . import schemas
 from .constants import SLEEP
-from .laser_alignment_listener import LaserAlignmentListener
+
+# from .laser_alignment_listener import LaserAlignmentListener
 from .read_serial_temp_scanner import SerialTemperatureScanner
 
 
@@ -15,7 +19,11 @@ def execute_runner():
     """Execute the runner service."""
     parser = argparse.ArgumentParser()
     parser.parse_args()
-    Runner()
+    asyncio.run(amain())
+
+
+async def amain():
+    return Runner()
 
 
 class Runner(tcpip.OneClientServer):
@@ -40,9 +48,12 @@ class Runner(tcpip.OneClientServer):
         self.laser_alignment = None
         self.serial_scanner = None
         self.heartbeat_task = utils.make_done_future()
-        self.validator = jsonschema.Validator(
-            schema=pathlib.Path("../schemas/heartbeat.json")
+        self.validator = jsonschema.Draft7Validator(
+            schema=json.load(
+                pathlib.Path(impresources.files(schemas) / "heartbeat.json").open()
+            )
         )
+        super().__init__(host=tcpip.LOCAL_HOST, port=8080, log=self.log)
 
     def configure(self, config):
         # TODO: DM-47286 Add configure method and schema
@@ -56,12 +67,10 @@ class Runner(tcpip.OneClientServer):
         kwargs : `dict`
             Any arguments that can be passed to asyncio.create_server.
         """
-        self.laser_alignment = LaserAlignmentListener(log=self.log)
+        # self.laser_alignment = LaserAlignmentListener(log=self.log)
         self.serial_scanner = SerialTemperatureScanner(log=self.log)
-        self.heartbeat_task = asyncio.ensure_future(self.heartbeat)
-        await asyncio.gather(
-            [self.laser_alignment.start_task, self.serial_scanner.start_task]
-        )
+        self.heartbeat_task = asyncio.ensure_future(self.heartbeat())
+        await self.serial_scanner.start_task
         await super().start(kwargs=kwargs)
 
     async def close(self):
