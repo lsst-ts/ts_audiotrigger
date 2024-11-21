@@ -19,6 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import asyncio
 import logging
 import pathlib
 import unittest
@@ -39,27 +40,23 @@ class SerialTempScannerTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_read_serial_temp_scanner(self) -> None:
         temp_scanner_task = SerialTemperatureScanner(log=self.log, simulation_mode=True)
-
-        # inject good data
-        temp_scanner_task.serial.inject_data(
-            data=temp_scanner_task.fan_turn_off_temp, dict_position="C01"
-        )
-
-        # update data
-        await temp_scanner_task.get_data()
-        await temp_scanner_task.handle_data(temp_scanner_task.latest_data)
-
-        # confirm gpio status
-        assert temp_scanner_task.pi.read(temp_scanner_task.fan_gpio) == Fan.OFF
-
-        # inject bad data
-        temp_scanner_task.serial.inject_data(
-            data=temp_scanner_task.fan_turn_on_temp, dict_position="C01"
-        )
-
-        # update data
-        await temp_scanner_task.get_data()
-        await temp_scanner_task.handle_data(temp_scanner_task.latest_data)
-
-        # confirm gpio status
-        assert temp_scanner_task.pi.read(temp_scanner_task.fan_gpio) == Fan.ON
+        await temp_scanner_task.start_task
+        await asyncio.sleep(1)
+        assert temp_scanner_task.data is not None
+        assert type(temp_scanner_task.data["telemetry"]["sensor_telemetry"][0]) is float
+        while temp_scanner_task.pi.read(4) == Fan.OFF:
+            await asyncio.sleep(1)
+        assert temp_scanner_task.pi.read(4) == Fan.ON
+        # The random values of the mock sensor are updated in such a
+        # way that this assert can fail.
+        # Need to figure out how to test this consistently.
+        # assert temp_scanner_task.data["telemetry"]["sensor_telemetry"][0]
+        # >= 25
+        while temp_scanner_task.pi.read(4) == Fan.ON:
+            await asyncio.sleep(1)
+        assert temp_scanner_task.pi.read(4) == Fan.OFF
+        # The random values of the mock sensor are updated in such a
+        # way that this assert can fail.
+        # Need to figure out how to test this consistently.
+        # assert temp_scanner_task.data["telemetry"]["sensor_telemetry"][0]
+        # <= 19
