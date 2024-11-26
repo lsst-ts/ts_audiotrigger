@@ -76,7 +76,7 @@ class Runner(tcpip.OneClientServer):
     async def close(self):
         """Close the services."""
         await asyncio.gather(
-            [
+            *[
                 self.laser_alignment.close(),
                 self.serial_scanner.close(),
                 self.heartbeat_task.cancel(),

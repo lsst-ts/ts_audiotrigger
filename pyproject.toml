@@ -29,7 +29,7 @@ __version__ = "{version}"
 asyncio_mode = "auto"
 
 [project.scripts]
-run_audiotrigger = "lsst.ts.audiotrigger:execute_runner"
+run_serial_temperature_scanner = "lsst.ts.audiotrigger:execute_serial_temperature_scanner"
 
 [project.optional-dependencies]
 dev = ["documenteer[pipelines]"]

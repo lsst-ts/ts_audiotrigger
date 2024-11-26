@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["MAX_PI_GPIOS", "SLEEP", "THRESHOLD"]
+__all__ = ["MAX_PI_GPIOS", "SLEEP", "THRESHOLD", "MIN", "MAX", "SENSOR_INDEX"]
 
 MAX_PI_GPIOS = 32
 """Maximum number of pi GPIO pins."""
@@ -27,3 +27,6 @@ SLEEP = 1
 """Default sleep timer."""
 THRESHOLD = 10
 """Threshold over which misalignment of laser beam occurs."""
+MIN = 19
+MAX = 25
+SENSOR_INDEX = 0

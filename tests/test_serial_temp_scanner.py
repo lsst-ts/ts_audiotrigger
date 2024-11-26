@@ -23,9 +23,13 @@ import asyncio
 import logging
 import pathlib
 import unittest
+from types import SimpleNamespace
 from typing import TypeAlias
+from unittest.mock import ANY, AsyncMock, MagicMock
 
+import yaml
 from lsst.ts.audiotrigger import Fan, SerialTemperatureScanner
+from lsst.ts.ess.common.data_client import ControllerDataClient
 
 PathT: TypeAlias = str | pathlib.Path
 
@@ -37,6 +41,11 @@ class SerialTempScannerTestCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.log = logging.getLogger()
         self.data_dir = pathlib.Path(__file__).parent / "data" / "config"
+
+    def get_config(self, filename):
+        with open(self.data_dir / filename) as f:
+            config = yaml.safe_load(f.read())
+        return SimpleNamespace(**config)
 
     async def test_read_serial_temp_scanner(self) -> None:
         temp_scanner_task = SerialTemperatureScanner(log=self.log, simulation_mode=True)
@@ -60,3 +69,34 @@ class SerialTempScannerTestCase(unittest.IsolatedAsyncioTestCase):
         # Need to figure out how to test this consistently.
         # assert temp_scanner_task.data["telemetry"]["sensor_telemetry"][0]
         # <= 19
+        await temp_scanner_task.close()
+
+    async def test_ess_client(self):
+        temp_scanner = SerialTemperatureScanner(log=self.log, simulation_mode=True)
+        config = self.get_config("ess.yaml")
+        evt_sensor_status = AsyncMock()
+        await temp_scanner.start_task
+        await asyncio.sleep(1)
+        tel_temperature = AsyncMock()
+        tel_temperature.DataType = MagicMock(
+            return_value=SimpleNamespace(
+                temperatureItem=temp_scanner.data["telemetry"]["sensor_telemetry"]
+            )
+        )
+        topics_data = {
+            "tel_temperature": tel_temperature,
+            "evt_sensorStatus": evt_sensor_status,
+        }
+        topics = SimpleNamespace(**topics_data)
+        async with ControllerDataClient(
+            config=config, topics=topics, log=self.log, simulation_mode=1
+        ):
+            await asyncio.sleep(2)
+            tel_temperature.set_write.assert_called_with(
+                sensorName=config.devices[0]["name"],
+                timestamp=ANY,
+                temperatureItem=ANY,
+                numChannels=8,
+                location=config.devices[0]["location"],
+            )
+        await temp_scanner.close()
