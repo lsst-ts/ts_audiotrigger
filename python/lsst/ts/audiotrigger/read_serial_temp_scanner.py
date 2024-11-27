@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["SerialTemperatureScanner", "execute_serial_temperature_scanner"]
+__all__ = ["SerialTemperatureScanner", "run_serial_temperature_scanner"]
 
 import argparse
 import asyncio
@@ -40,7 +40,7 @@ async def callback(data):
     SerialTemperatureScanner.data = data
 
 
-def execute_serial_temperature_scanner():
+def run_serial_temperature_scanner():
     parser = argparse.ArgumentParser()
     parser.add_argument("--simulate", action="store_true")
     args = parser.parse_args()
@@ -137,27 +137,28 @@ class SerialTemperatureScanner:
         self.fan_gpio = None
         self.fan_turn_on_temp = 0
         self.fan_turn_off_temp = 0
-
+        device_id = "/dev/ttyUSB0"
+        sensor = common.sensor.TemperatureSensor(log=self.log, num_channels=8)
+        callback_func = callback
+        log = self.log
+        baud_rate = 19200
+        kwargs = {
+            "device_id": device_id,
+            "sensor": sensor,
+            "callback_func": callback_func,
+            "log": log,
+            "baud_rate": baud_rate,
+        }
         if self.simulation_mode:
             self.pi = MockPio()
-            self.serial = common.device.MockDevice(
-                name="Mock Fan Control sensors",
-                device_id="/dev/ttyUSB0",
-                sensor=common.sensor.TemperatureSensor(log=self.log, num_channels=8),
-                callback_func=callback,
-                log=self.log,
-            )
+            name = "Mock Fan Control sensors"
+            device_class = common.device.MockDevice
+            kwargs["name"] = name
+            kwargs.pop("baud_rate")
         else:
             self.pi = pigpio.pi()
-            self.serial = controller.device.RpiSerialHat(
-                name="Fan Control sensors",
-                device_id="/dev/ttyUSB0",
-                sensor=common.sensor.TemperatureSensor(log=self.log, num_channels=8),
-                baud_rate=19200,
-                callback_func=callback,
-                log=self.log,
-            )
-
+            device_class = controller.device.RpiSerialHat
+        self.serial = device_class(**kwargs)
         self.configured = False
         self.first_run = True
         self.loop = asyncio.get_running_loop()
