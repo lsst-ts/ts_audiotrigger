@@ -1,4 +1,6 @@
 setupRequired(base)
+setupRequired(ts_ess_common)
+setupRequired(ts_ess_controller)
 
 envPrepend(PYTHONPATH, ${PRODUCT_DIR}/python)
 envPrepend(PATH, ${PRODUCT_DIR}/bin)

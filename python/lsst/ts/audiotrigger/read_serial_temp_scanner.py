@@ -19,22 +19,58 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["SerialTemperatureScanner"]
+__all__ = ["SerialTemperatureScanner", "run_serial_temperature_scanner"]
 
+import argparse
 import asyncio
 import functools
 import logging
 from collections import OrderedDict
 
 import pigpio
-import serial
-from lsst.ts import tcpip
+from lsst.ts import tcpip, utils
+from lsst.ts.ess import common, controller
 
+from .constants import SENSOR_INDEX
 from .enums import Fan
-from .mocks import MockPio, MockThermalSensor
+from .mocks import MockPio
 
 
-class SerialTemperatureScanner(tcpip.OneClientServer):
+async def callback(data):
+    SerialTemperatureScanner.data = data
+
+
+def run_serial_temperature_scanner():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--simulate", action="store_true")
+    args = parser.parse_args()
+    asyncio.run(amain(args))
+
+
+async def amain(args):
+    sts = SerialTemperatureScanner(
+        log=logging.getLogger(__name__), simulation_mode=args.simulate
+    )
+    await sts.start_task
+    while True:
+        await asyncio.sleep(1)
+
+
+class FanControlServer(tcpip.OneClientServer):
+    def __init__(self, port=18830):
+        super().__init__(
+            host=tcpip.LOCAL_HOST, port=port, log=logging.getLogger(__name__)
+        )
+
+
+class EssServer(tcpip.OneClientServer):
+    def __init__(self, port=15000):
+        super().__init__(
+            host=tcpip.LOCAL_HOST, port=port, log=logging.getLogger(__name__)
+        )
+
+
+class SerialTemperatureScanner:
     """This is the class that implements the Serial Temperature Scanner script.
 
     Class to readout temperature sensors from serial device for laser
@@ -42,22 +78,11 @@ class SerialTemperatureScanner(tcpip.OneClientServer):
 
     Parameters
     ----------
-    logger : `logging.Logger`
+    log : `logging.Logger`
         logger object
-    port : `int`, optional
-        port that the server will be hosted on, default 1883
-    host : `str`, optional
-        IP the server will be hosted on, default tcpip.DEFAULT_LOCALHOST
-    encoding : `str`, optional
-        Encoding used for the packets
-    terminator: `bytes`, optional
-        terminating character used for packets
-    sample_wait_time: `int`, optional
-        time to wait between getting temperature samples
-    serial: `serial` or `None`, optional
-        serial object that the temperature scanner device is connected
-    temperature_windows: `int`, optional
-        Amount of temperature windows to average for rolling avg window
+    simulation_mode: `boolean`
+        Should the device startup in simulation mode.
+
 
     Attributes
     ----------
@@ -65,10 +90,6 @@ class SerialTemperatureScanner(tcpip.OneClientServer):
         Log instance.
     simulation_mode : bool
         Is the temperature scanner in simulation mode.
-    serial : serial.Serial
-        The serial port instance.
-    sensor_dict : dict
-        The sensor information.
     sample_wait_time : int
         The wait time between getting samples.
     fan_sensor : str
@@ -89,75 +110,70 @@ class SerialTemperatureScanner(tcpip.OneClientServer):
         Is the server configured.
     first_run : bool
         Is the first run.
-    encoding : str
-        The string encoding type.
-    port : int
-        The port.
-    host : str
-        The host.
     loop : asyncio.Loop
         The current running async loop.
+    error_validator : `None`
+        The jsonschema validator for error messages.
+    fan_control_server : `FanControlServer`
+        The service that handles turning the fan on/off.
+    ess_server : `EssServer`
+        The service that handles sending data to the ESS client.
     """
+
+    data = None
 
     def __init__(
         self,
         log: logging.Logger | None = None,
-        port: int | None = 18830,
-        host: str | None = tcpip.DEFAULT_LOCALHOST,
-        encoding: str = tcpip.DEFAULT_ENCODING,
-        terminator: bytes = tcpip.DEFAULT_TERMINATOR,
-        sample_wait_time: int = 5,
-        serial=None,
-        temperature_windows: int = 8,
         simulation_mode=False,
     ):
         self.log = log
-        self.simulation_mode = simulation_mode
-
-        if not self.simulation_mode:
-            super().__init__(
-                log=self.log,
-                port=port,
-                host=host,
-                connect_callback=None,
-                monitor_connection_interval=0,
-                name="",
-                encoding=encoding,
-                terminator=terminator,
-            )
-
-        self.serial = serial
+        self.simulation_mode = bool(simulation_mode)
         self.sensor_dict = {}
-        self.sample_wait_time = sample_wait_time
+        self.sample_wait_time = 5
 
         # Fan sensor
         self.fan_sensor = ""
         self.fan_gpio = None
         self.fan_turn_on_temp = 0
         self.fan_turn_off_temp = 0
-
-        self.latest_data = {sensor_name: 0 for sensor_name in self.sensor_dict}
-        self.rolling_temperature = [0 for _ in range(temperature_windows)]
-
+        device_id = "/dev/ttyUSB0"
+        sensor = common.sensor.TemperatureSensor(log=self.log, num_channels=8)
+        callback_func = callback
+        log = self.log
+        baud_rate = 19200
+        kwargs = {
+            "device_id": device_id,
+            "sensor": sensor,
+            "callback_func": callback_func,
+            "log": log,
+            "baud_rate": baud_rate,
+        }
         if self.simulation_mode:
             self.pi = MockPio()
+            name = "Mock Fan Control sensors"
+            device_class = common.device.MockDevice
+            kwargs["name"] = name
+            kwargs.pop("baud_rate")
         else:
             self.pi = pigpio.pi()
-
+            device_class = controller.device.RpiSerialHat
+        self.serial = device_class(**kwargs)
         self.configured = False
         self.first_run = True
-        self.encoding = encoding
-        self.port = port
-        self.host = host
         self.loop = asyncio.get_running_loop()
         self.error_validator = None
+        self.fan_control_server = FanControlServer()
+        self.ess_server = EssServer()
+        self.start_task = utils.make_done_future()
+        self.start_task = asyncio.ensure_future(self.start())
+        self.done_task = utils.make_done_future()
+        self.task = utils.make_done_future()
         self.config()
 
     def config(self):
         """Configure the temperature scanner."""
-        # TODO: DM-47286 Get config from runner service.
-        PORT = "/dev/ttyUSB0"
-        BAUDRATE = 19200
+        # TODO: DM-47784 Get serial config from ESS client.
         self.sensor_dict = OrderedDict(
             {
                 "C01": "Ambient",
@@ -171,19 +187,6 @@ class SerialTemperatureScanner(tcpip.OneClientServer):
             }
         )  # These will need to be in some configuration file
 
-        # Define serial connection
-        if self.simulation_mode:
-            self.serial = MockThermalSensor()
-        else:
-            self.serial = serial.Serial(
-                port=PORT,
-                baudrate=BAUDRATE,
-                parity=serial.PARITY_NONE,
-                stopbits=serial.STOPBITS_ONE,
-                bytesize=serial.EIGHTBITS,
-                timeout=1,
-            )
-
         # fan sensor
         self.fan_sensor = "Ambient"
         self.fan_gpio = 4
@@ -192,17 +195,22 @@ class SerialTemperatureScanner(tcpip.OneClientServer):
         self.fan_turn_off_temp = self.fan_turn_on_temp - hysteresis
         self.configured = True
 
-    async def start(self, **kwargs):
+    async def start(self):
         """Start reading the temperature channels."""
         self.task = asyncio.ensure_future(self.serial_temperature_task())
-        await super().start(kwargs=kwargs)
+        await asyncio.gather(
+            self.serial.open(),
+            self.fan_control_server.start_task,
+            self.ess_server.start_task,
+        )
 
-    async def write_if_connected(self, string_to_write):
-        """Write message if connected."""
-        if self.simulation_mode:
-            return
-        if self.connected:
-            await self.write_json(string_to_write)
+    async def close(self):
+        self.task.cancel()
+        await asyncio.gather(
+            self.serial.close(),
+            self.fan_control_server.close(),
+            self.ess_server.close(),
+        )
 
     async def set_fan(self, setting):
         """Set the fan on/off.
@@ -213,12 +221,6 @@ class SerialTemperatureScanner(tcpip.OneClientServer):
             Turn the fan on or off.
         """
         if not self.pi.connected:
-            msg = {
-                "id": "error",
-                "code": 1,
-                "message": "Not configured properly actuating fan.",
-            }
-            await self.write_if_connected(msg)
             raise ValueError("Not configured properly before actuating fan")
         match setting:
             case Fan.ON:
@@ -228,10 +230,11 @@ class SerialTemperatureScanner(tcpip.OneClientServer):
             case _:
                 raise Exception("Value is not valid.")
         msg = {"id": "set_fan", "value": value}
-        await self.write_if_connected(msg)
         await self.loop.run_in_executor(
             None, functools.partial(self.pi.write, self.fan_gpio, setting)
         )
+        if self.fan_control_server.connected:
+            await self.fan_control_server.write_json(msg)
 
     async def set_fan_on(self):
         """Turn the fan on."""
@@ -241,90 +244,30 @@ class SerialTemperatureScanner(tcpip.OneClientServer):
         """Turn the fan off."""
         await self.set_fan(Fan.OFF)
 
-    async def handle_data(self, new_data):
-        """Handle the incoming data.
+    async def check_temp(self, data):
+        """Check the ambient sensor temperature and turn the fan on/off.
 
         Parameters
         ----------
-        new_data : `dict`
-            New data.
+        data : `dict`
+            The data received from the ESS device.
         """
-        # We only care about one sensor's reading for operating the fan
-        try:
-            new_data[self.fan_sensor] = float(new_data[self.fan_sensor])
-        except KeyError:
-            self.log.exception(f"No {self.fan_sensor} key found in new_data.")
-        except Exception as e:
-            msg = {"id": "error", "code": 3, "message": "Failed to convert to int."}
-            await self.write_if_connected(msg)
-            self.log.exception(
-                f"Exception trying to convert data to int... Data: {new_data[self.fan_sensor], {str(e)}}"
-            )
-            return
-        if new_data[self.fan_sensor] >= self.fan_turn_on_temp:
-            self.log.info(f"Turning ON fan, temperature: {new_data[self.fan_sensor]}")
-            await self.set_fan_on()
-        elif new_data[self.fan_sensor] < self.fan_turn_off_temp:
-            self.log.info(f"Turning OFF fan, temperature: {new_data[self.fan_sensor]}")
+        ambient = data["telemetry"]["sensor_telemetry"][SENSOR_INDEX]
+        if ambient <= self.fan_turn_off_temp:
             await self.set_fan_off()
+        if ambient >= self.fan_turn_on_temp:
+            await self.set_fan_on()
 
-        # Now for telemetry, do a rolling average of all 8 sensors
-        new_temperature = 0
-        for reading in new_data:
-            data = float(new_data[reading])
-            self.log.info(f"reading: {data}")
-            new_temperature += data
-        new_temperature = new_temperature / len(new_data)
+    async def publish_data(self, data):
+        """Publish the data through the ESS server.
 
-        # Handle initial data loading
-        if self.first_run:
-            self.first_run = False
-            for i in range(len(self.rolling_temperature)):
-                self.rolling_temperature[i] = new_temperature
-        else:
-            # Update rolling temperature windows
-            # freshest data starts at 0 index and goes towards max length index
-            for i in range(len(self.rolling_temperature) - 1, 0, -1):
-                self.rolling_temperature[i] = self.rolling_temperature[i - 1]
-
-        # Update freshest at index 0
-        self.log.info(f"New rolling temperature data logged: {new_temperature}")
-        msg = {"id": "new_temperature", "value": new_temperature}
-        await self.write_if_connected(msg)
-        self.rolling_temperature[0] = new_temperature
-        self.log.info("test after rolling temp")
-
-    async def get_data(self):
-        """Get incoming data."""
-        try:
-            in_waiting = await self.loop.run_in_executor(None, self.serial.inWaiting)
-            readings = await self.loop.run_in_executor(
-                None, functools.partial(self.serial.read, in_waiting)
-            )
-            readings = readings.decode("ISO-8859-1").rstrip()
-            # reads all data since last read
-            latest_reading = readings.split("\n")[-2]
-            # Reason for taking second to last reading rather
-            # than most recent is because most recent reading
-            # often doesn't have values from all sensors.
-            # This is because each channel is published at
-            # a rate of 125 milliseconds and we read from
-            # the number of bytes in waiting.
-            for reading in latest_reading.split(","):
-                try:
-                    sensor_location, sensor_reading = reading.split("=")
-                    self.latest_data[self.sensor_dict[sensor_location]] = sensor_reading
-                    self.log.info(
-                        f"New data logged, reading: {sensor_reading}, location: {sensor_location}"
-                    )
-                except Exception:
-                    pass
-        except Exception as e:
-            msg = {"id": "error", "code": 2, "message": f"Received exception {e}"}
-            await self.write_if_connected(msg)
-            self.log.warning(
-                f"Serial Temperature Scanner tried to get data, got exception instead: {e}"
-            )
+        Parameters
+        ----------
+        data : `dict`
+            The data recieved from the ESS device.
+        """
+        if self.ess_server.connected:
+            await self.ess_server.write_json(data)
 
     async def serial_temperature_task(self):
         """Get incoming data and publish through the server."""
@@ -333,18 +276,13 @@ class SerialTemperatureScanner(tcpip.OneClientServer):
 
         while True:
             try:
-                # Get fresh data
-                await self.get_data()
-
-                # Handle the data
-                await self.handle_data(self.latest_data)
+                self.log.debug(self.data)
+                if self.data is not None:
+                    self.log.debug(self.data)
+                    async with asyncio.TaskGroup() as tg:
+                        tg.create_task(self.check_temp(self.data))
+                        tg.create_task(self.publish_data(self.data))
             except Exception as e:
-                msg = {
-                    "id": "error",
-                    "code": 4,
-                    "message": f"Task had an exception {e}",
-                }
-                await self.write_if_connected(msg)
-                self.log.warning(f"Main task excepted {e}")
+                self.log.exception(f"Main task excepted {e}")
             self.log.info(f"Waiting {self.sample_wait_time} seconds")
             await asyncio.sleep(self.sample_wait_time)

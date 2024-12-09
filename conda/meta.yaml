@@ -20,7 +20,7 @@ test:
     - setup.py
     - pyproject.toml
   commands:
-    - run_audiotrigger -h
+    - run_serial_temperature_scanner -h
     - pytest
 
 requirements:
@@ -46,3 +46,5 @@ requirements:
     - pyserial =3.5
     - ts-utils =1.2
     - jsonschema =4.20
+    - ts-ess-controller
+    - ts-ess-common
