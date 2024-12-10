@@ -58,16 +58,12 @@ async def amain(args):
 
 class FanControlServer(tcpip.OneClientServer):
     def __init__(self, port=18830):
-        super().__init__(
-            host=tcpip.LOCAL_HOST, port=port, log=logging.getLogger(__name__)
-        )
+        super().__init__(host="0.0.0.0", port=port, log=logging.getLogger(__name__))
 
 
 class EssServer(tcpip.OneClientServer):
     def __init__(self, port=15000):
-        super().__init__(
-            host=tcpip.LOCAL_HOST, port=port, log=logging.getLogger(__name__)
-        )
+        super().__init__(host="0.0.0.0", port=port, log=logging.getLogger(__name__))
 
 
 class SerialTemperatureScanner:
@@ -137,12 +133,13 @@ class SerialTemperatureScanner:
         self.fan_gpio = None
         self.fan_turn_on_temp = 0
         self.fan_turn_off_temp = 0
-        device_id = "/dev/ttyUSB0"
+        device_id = "/dev/ttyUSB_lower_right"
         sensor = common.sensor.TemperatureSensor(log=self.log, num_channels=8)
         callback_func = callback
         log = self.log
         baud_rate = 19200
         kwargs = {
+            "name": "Fan Control Sensors",
             "device_id": device_id,
             "sensor": sensor,
             "callback_func": callback_func,
