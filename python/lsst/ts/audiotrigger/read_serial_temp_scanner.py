@@ -25,6 +25,7 @@ import argparse
 import asyncio
 import functools
 import logging
+import logging.config
 from collections import OrderedDict
 
 import pigpio
@@ -37,7 +38,7 @@ from .mocks import MockPio
 
 
 async def callback(data):
-    SerialTemperatureScanner.data = data
+    setattr(SerialTemperatureScanner, "data", data)
 
 
 def run_serial_temperature_scanner():
@@ -48,6 +49,9 @@ def run_serial_temperature_scanner():
 
 
 async def amain(args):
+    logging.basicConfig(
+        filename="run_serial_temperature_scanner.log", level=logging.DEBUG
+    )
     sts = SerialTemperatureScanner(
         log=logging.getLogger(__name__), simulation_mode=args.simulate
     )
@@ -126,7 +130,7 @@ class SerialTemperatureScanner:
         self.log = log
         self.simulation_mode = bool(simulation_mode)
         self.sensor_dict = {}
-        self.sample_wait_time = 5
+        self.sample_wait_time = 1
 
         # Fan sensor
         self.fan_sensor = ""
@@ -167,6 +171,7 @@ class SerialTemperatureScanner:
         self.done_task = utils.make_done_future()
         self.task = utils.make_done_future()
         self.config()
+        self.log.info("SerialTemperatureScanner configured.")
 
     def config(self):
         """Configure the temperature scanner."""
@@ -194,12 +199,12 @@ class SerialTemperatureScanner:
 
     async def start(self):
         """Start reading the temperature channels."""
-        self.task = asyncio.ensure_future(self.serial_temperature_task())
+        await self.serial.open()
         await asyncio.gather(
-            self.serial.open(),
             self.fan_control_server.start_task,
             self.ess_server.start_task,
         )
+        self.task = asyncio.ensure_future(self.serial_temperature_task())
 
     async def close(self):
         self.task.cancel()
@@ -270,16 +275,16 @@ class SerialTemperatureScanner:
         """Get incoming data and publish through the server."""
         # Read sensors
         # wait for sample_wait_time between readings
-
+        self.log.info("Starting Serial Temperature loop.")
         while True:
             try:
-                self.log.debug(self.data)
+                self.log.info(f"{self.data=}")
                 if self.data is not None:
                     self.log.debug(self.data)
                     async with asyncio.TaskGroup() as tg:
                         tg.create_task(self.check_temp(self.data))
                         tg.create_task(self.publish_data(self.data))
-            except Exception as e:
-                self.log.exception(f"Main task excepted {e}")
+            except Exception:
+                self.log.exception("Temperature loop failed.")
             self.log.info(f"Waiting {self.sample_wait_time} seconds")
             await asyncio.sleep(self.sample_wait_time)
