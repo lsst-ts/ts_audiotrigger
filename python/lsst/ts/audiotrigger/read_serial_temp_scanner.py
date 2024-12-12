@@ -49,9 +49,9 @@ def run_serial_temperature_scanner():
 
 
 async def amain(args):
-    logging.basicConfig(
-        filename="run_serial_temperature_scanner.log", level=logging.DEBUG
-    )
+    # logging.basicConfig(
+    #     filename="run_serial_temperature_scanner.log", level=logging.DEBUG
+    # )
     sts = SerialTemperatureScanner(
         log=logging.getLogger(__name__), simulation_mode=args.simulate
     )
@@ -192,7 +192,7 @@ class SerialTemperatureScanner:
         # fan sensor
         self.fan_sensor = "Ambient"
         self.fan_gpio = 4
-        self.fan_turn_on_temp = 25
+        self.fan_turn_on_temp = 24
         hysteresis = 2
         self.fan_turn_off_temp = self.fan_turn_on_temp - hysteresis
         self.configured = True
