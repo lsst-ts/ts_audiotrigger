@@ -232,11 +232,15 @@ class SerialTemperatureScanner:
             case _:
                 raise Exception("Value is not valid.")
         msg = {"id": "set_fan", "value": value}
-        await self.loop.run_in_executor(
-            None, functools.partial(self.pi.write, self.fan_gpio, setting)
+        reading = await self.loop.run_in_executor(
+            None, functools.partial(self.pi.read, self.fan_gpio)
         )
-        if self.fan_control_server.connected:
-            await self.fan_control_server.write_json(msg)
+        if reading != setting:
+            await self.loop.run_in_executor(
+                None, functools.partial(self.pi.write, self.fan_gpio, setting)
+            )
+            if self.fan_control_server.connected:
+                await self.fan_control_server.write_json(msg)
 
     async def set_fan_on(self):
         """Turn the fan on."""
