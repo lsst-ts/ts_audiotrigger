@@ -269,7 +269,12 @@ class SerialTemperatureScanner:
             The data recieved from the ESS device.
         """
         if self.ess_server.connected:
-            await self.ess_server.write_json(data)
+            array = data["telemetry"]["sensor_telemetry"]
+            line = ""
+            for idx, value in enumerate(array):
+                line += f"C0{idx}={value},"
+            line = line[:-1]
+            await self.ess_server.write_str(line)
 
     async def serial_temperature_task(self):
         """Get incoming data and publish through the server."""
