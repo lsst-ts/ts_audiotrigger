@@ -40,3 +40,13 @@ TEMPERATURE_MAX = 25
 """Maximum temperature for the ambient sensor for the fan to start."""
 SENSOR_INDEX = 0
 """The index for ambient temperature sensor."""
+BAUDRATE = 19200
+"""Serial port baud rate."""
+FAN_GPIO_PIN = 4
+"""Fan control GPIO pin."""
+TURN_ON_TEMP = 24
+"""Turn on the fan at or above this temperature. (Deg_C)"""
+TURN_OFF_TEMP = 22
+"""Turn off the fan at or below this temperature. (Deg_C)"""
+SERIAL_PORT = "/dev/ttyUSB_lower_right"
+"""Serial port file descriptor."""

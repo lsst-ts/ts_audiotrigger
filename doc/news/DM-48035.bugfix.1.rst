@@ -1,1 +1,1 @@
-Change servers to use 0.0.0.0 instead of localhost.
+Changed servers to use 0.0.0.0 instead of localhost.

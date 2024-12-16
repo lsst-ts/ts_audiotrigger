@@ -1,1 +1,1 @@
-Remove dash from noarch argument.
+Removed dash from noarch argument.
