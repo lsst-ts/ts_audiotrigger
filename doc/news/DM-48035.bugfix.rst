@@ -1,1 +1,0 @@
-Changed USB port to /dev/ttyUSB_lower_right.
