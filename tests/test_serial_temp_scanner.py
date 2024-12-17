@@ -49,6 +49,7 @@ class SerialTempScannerTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_read_serial_temp_scanner(self) -> None:
         temp_scanner_task = SerialTemperatureScanner(log=self.log, simulation_mode=True)
+        await temp_scanner_task.start()
         await temp_scanner_task.start_task
         await asyncio.sleep(1)
         assert temp_scanner_task.data is not None
@@ -75,6 +76,7 @@ class SerialTempScannerTestCase(unittest.IsolatedAsyncioTestCase):
         temp_scanner = SerialTemperatureScanner(log=self.log, simulation_mode=True)
         config = self.get_config("ess.yaml")
         evt_sensor_status = AsyncMock()
+        await temp_scanner.start()
         await temp_scanner.start_task
         await asyncio.sleep(1)
         tel_temperature = AsyncMock()

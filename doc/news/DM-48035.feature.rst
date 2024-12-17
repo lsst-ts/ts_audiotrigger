@@ -1,0 +1,1 @@
+Split FanControl to provide data to ESS's DataClient and turn fan on/off based on ambient temperature sensor.
