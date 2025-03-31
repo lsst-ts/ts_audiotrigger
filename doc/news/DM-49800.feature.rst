@@ -1,0 +1,1 @@
+Created log config that prints log information.
