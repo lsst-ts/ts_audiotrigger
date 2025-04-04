@@ -55,9 +55,12 @@ def run_serial_temperature_scanner():
 
 
 async def amain(args):
-    sts = SerialTemperatureScanner(
-        log=logging.getLogger(__name__), simulation_mode=args.simulate
+    logging.basicConfig(
+        format="%(asctime)s:%(levelname)s:%(name)s:%(message)s",
+        level=logging.INFO,
     )
+    log = logging.getLogger(__name__)
+    sts = SerialTemperatureScanner(log=log, simulation_mode=args.simulate)
     await sts.start()
     await sts.start_task
     while True:
