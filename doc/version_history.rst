@@ -1,3 +1,12 @@
+v0.3.0 (2025-04-14)
+===================
+
+New Features
+------------
+
+- Created log config that prints log information. (`DM-49800 <https://rubinobs.atlassian.net//browse/DM-49800>`_)
+
+
 v0.2.0 (2024-12-17)
 ===================
 
