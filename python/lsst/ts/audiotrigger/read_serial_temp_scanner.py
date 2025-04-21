@@ -208,9 +208,9 @@ class SerialTemperatureScanner:
             self.fan_control_server.start_task,
             self.ess_server.start_task,
         )
-        self.temperature_task = asyncio.ensure_future(self.serial_temperature_task())
+        self.temperature_task = asyncio.create_task(self.serial_temperature_task())
 
-    async def close(self):
+    async def stop(self):
         """Close running tasks."""
         self.temperature_task.cancel()
         await asyncio.gather(
