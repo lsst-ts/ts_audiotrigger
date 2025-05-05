@@ -42,7 +42,7 @@ from .enums import Relay
 from .mocks import MockPio, MockSoundDevice
 
 
-class LaserAlignmentListener(tcpip.OneClientServer):
+class LaserAlignmentListener:
     """Implement the laser alignment script.
 
     Parameters
@@ -67,6 +67,8 @@ class LaserAlignmentListener(tcpip.OneClientServer):
         Sample frequency
     simulation_mode : `bool`, optional
         If class is being simulated
+    disable_microphone : `bool`
+        If microphone analysis code should run.
 
     Attributes
     ----------
@@ -101,30 +103,18 @@ class LaserAlignmentListener(tcpip.OneClientServer):
         log: logging.Logger | None = None,
         port: int | None = 18840,
         host: str | None = tcpip.DEFAULT_LOCALHOST,
-        encoding: str = tcpip.DEFAULT_ENCODING,
-        terminator: bytes = tcpip.DEFAULT_TERMINATOR,
         sample_record_dur: float = 0.1,
         input: int = 0,
         output: int = 4,
         fs: int | None = None,
         simulation_mode: bool = False,
+        disable_microphone: bool = False,
     ):
+        self.port = port
+        self.host = host
         self.log = log
-
+        self.disable_microphone = disable_microphone
         self.simulation_mode = simulation_mode
-        # Unit test avoids using the server component.
-        # TODO: DM-47286 Use server in mocking/simulation.
-        if not self.simulation_mode:
-            super().__init__(
-                log=self.log,
-                host=host,
-                port=port,
-                connect_callback=None,
-                name="",
-                encoding=encoding,
-                terminator=terminator,
-            )
-
         self.input = input
         self.output = output
         self.sample_record_dur = sample_record_dur
@@ -133,11 +123,12 @@ class LaserAlignmentListener(tcpip.OneClientServer):
             self.fs = None
             self.pi = MockPio()
         else:
-            sd.default.device = (input, output)
-            if fs is None:
-                self.fs = sd.query_devices(input)["default_samplerate"]
-            else:
-                self.fs = fs
+            if not self.disable_microphone:
+                sd.default.device = (input, output)
+                if fs is None:
+                    self.fs = sd.query_devices(input)["default_samplerate"]
+                else:
+                    self.fs = fs
             self.pi = pigpio.pi()
 
         self.relay_gpio = 7
@@ -148,12 +139,12 @@ class LaserAlignmentListener(tcpip.OneClientServer):
         self.count_threshold = 7
         self.count = 0
         self.error_validator = jsonschema.Draft7Validator(
-            json.load(pathlib.Path(impresources.files("schemas") / "error.json").open())
+            json.load(pathlib.Path(impresources.files(schemas) / "error.json").open())
         )
         self.set_interrupt_status_validator = jsonschema.Draft7Validator(
             json.load(
                 pathlib.Path(
-                    impresources.files(schemas) / "set_interrupt_status.json"
+                    impresources.files(schemas) / "set_interrupt_state.json"
                 ).open()
             )
         )
@@ -165,30 +156,34 @@ class LaserAlignmentListener(tcpip.OneClientServer):
             )
         )
         self.start_laser_task = utils.make_done_future()
+        self.log_server = tcpip.OneClientServer(
+            host=self.host, port=self.port, log=self.log
+        )
 
     # TODO: DM-47286 Add configure method
 
     async def start(self, **kwargs):
         """Start the laser alignment analysis task."""
+        await self.log_server.start_task
         await self.open_laser_interrupt()
         if not self.start_laser_task.done():
             self.start_laser_task.cancel()
+        if not self.disable_microphone:
             self.start_laser_task = asyncio.create_task(
                 self.laser_alignment_task(self.sample_record_dur, self.fs)
             )
-        await super().start(**kwargs)
 
-    async def close(self):
+    async def stop(self):
         """Stop the laser alignment analysis task."""
-        if not self.start_laser_task.done():
-            self.start_laser_task.cancel()
+        notyet_cancelled = self.start_laser_task.cancel()
+        if notyet_cancelled:
+            await self.start_laser_task
         await self.close_laser_interrupt()
-        await super().close()
 
     async def write_if_connected(self, str):
         """Write if connected."""
-        if self.connected:
-            await self.write_json(str)
+        if self.log_server.connected:
+            await self.log_server.write_json(str)
 
     async def record_data(self, duration, fs):
         """Records sample data from microphone.
@@ -328,7 +323,7 @@ class LaserAlignmentListener(tcpip.OneClientServer):
         """Open the laser interrupt/interlock."""
         await self.set_relay_off()
         self.log.info("Laser interrupt opened")
-        msg = {"id": "set_interrupt_status", "value": "open"}
+        msg = {"id": "set_interrupt_state", "value": "open"}
         try:
             self.set_interrupt_status_validator.validate(msg)
         except Exception:
@@ -339,7 +334,7 @@ class LaserAlignmentListener(tcpip.OneClientServer):
         """Close the laser interrupt/interlock."""
         await self.set_relay_on()
         self.log.info("Laser Interrupt Activated, laser propagation disabled")
-        msg = {"id": "set_interrupt_status", "value": "close"}
+        msg = {"id": "set_interrupt_state", "value": "close"}
         try:
             self.set_interrupt_status_validator.validate(msg)
         except Exception:
@@ -349,7 +344,7 @@ class LaserAlignmentListener(tcpip.OneClientServer):
     async def restart(self):
         """Restart the laser interrupt."""
         self.log.info("Reset button pushed")
-        msg = {"id": "set_interrupt_status", "value": "reset"}
+        msg = {"id": "set_interrupt_state", "value": "reset"}
         try:
             self.set_interrupt_status_validator(msg)
         except Exception:

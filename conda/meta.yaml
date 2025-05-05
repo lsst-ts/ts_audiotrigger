@@ -9,6 +9,8 @@ source:
 build:
   noarch: python
   script: {{ PYTHON }} -m pip install --no-deps --ignore-installed .
+  entry_points:
+    - run_audiotrigger = lsst.ts.audiotrigger:execute_runner
 
 test:
   requires:
@@ -20,7 +22,7 @@ test:
     - setup.py
     - pyproject.toml
   commands:
-    - run_serial_temperature_scanner -h
+    - run_audiotrigger -h
     - pytest
 
 requirements:
