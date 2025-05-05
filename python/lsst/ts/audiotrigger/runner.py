@@ -21,6 +21,7 @@ def execute_runner():
     parser = argparse.ArgumentParser()
     parser.add_argument("--simulation-mode", action="store_true")
     parser.add_argument("--disable-microphone", action="store_true")
+    parser.add_argument("--lal-log-port", default=18840, type=int)
     args = parser.parse_args()
     asyncio.run(amain(args))
 
@@ -57,10 +58,11 @@ class Runner:
         Heartbeat publisher task.
     """
 
-    def __init__(self, log, disable_microphone, simulation_mode) -> None:
+    def __init__(self, log, disable_microphone, simulation_mode, lal_log_port) -> None:
         self.log = log
         self.disable_microphone = disable_microphone
         self.simulation_mode = simulation_mode
+        self.lal_log_port = lal_log_port
         self.laser_alignment = None
         self.serial_scanner = None
         self.run_task = utils.make_done_future()
@@ -79,6 +81,7 @@ class Runner:
             log=self.log,
             simulation_mode=self.simulation_mode,
             disable_microphone=self.disable_microphone,
+            port=self.lal_log_port,
         )
         self.serial_scanner = SerialTemperatureScanner(
             log=self.log, simulation_mode=self.simulation_mode

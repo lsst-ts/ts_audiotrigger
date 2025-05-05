@@ -67,6 +67,8 @@ class LaserAlignmentListener:
         Sample frequency
     simulation_mode : `bool`, optional
         If class is being simulated
+    disable_microphone : `bool`
+        If microphone analysis code should run.
 
     Attributes
     ----------
@@ -101,8 +103,6 @@ class LaserAlignmentListener:
         log: logging.Logger | None = None,
         port: int | None = 18840,
         host: str | None = tcpip.DEFAULT_LOCALHOST,
-        encoding: str = tcpip.DEFAULT_ENCODING,
-        terminator: bytes = tcpip.DEFAULT_TERMINATOR,
         sample_record_dur: float = 0.1,
         input: int = 0,
         output: int = 4,
@@ -110,6 +110,8 @@ class LaserAlignmentListener:
         simulation_mode: bool = False,
         disable_microphone: bool = False,
     ):
+        self.port = port
+        self.host = host
         self.log = log
         self.disable_microphone = disable_microphone
         self.simulation_mode = simulation_mode
@@ -155,7 +157,7 @@ class LaserAlignmentListener:
         )
         self.start_laser_task = utils.make_done_future()
         self.log_server = tcpip.OneClientServer(
-            host=tcpip.LOCAL_HOST, port=18840, log=self.log
+            host=self.host, port=self.port, log=self.log
         )
 
     # TODO: DM-47286 Add configure method
