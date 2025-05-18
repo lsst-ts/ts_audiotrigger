@@ -1,3 +1,18 @@
+v0.4.0 (2025-05-18)
+===================
+
+New Features
+------------
+
+- Combined laser alignment listener and read_serial_temp_scanner into one executable. (`DM-49499 <https://rubinobs.atlassian.net//browse/DM-49499>`_)
+
+
+Other Changes and Additions
+---------------------------
+
+- Renamed executable to run_audiotrigger. (`DM-49499 <https://rubinobs.atlassian.net//browse/DM-49499>`_)
+
+
 v0.3.0 (2025-04-14)
 ===================
 

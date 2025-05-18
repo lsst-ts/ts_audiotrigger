@@ -1,1 +1,0 @@
-Combined laser alignment listener and read_serial_temp_scanner into one executable.
