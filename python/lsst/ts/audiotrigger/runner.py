@@ -36,6 +36,7 @@ async def amain(args):
         log=log,
         disable_microphone=args.disable_microphone,
         simulation_mode=args.simulation_mode,
+        lal_log_port=args.lal_log_port,
     )
     run_task = asyncio.create_task(runner.run())
     await run_task
