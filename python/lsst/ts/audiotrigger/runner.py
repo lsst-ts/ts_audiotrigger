@@ -63,6 +63,7 @@ class Runner:
         self.log = log
         self.disable_microphone = disable_microphone
         self.simulation_mode = simulation_mode
+        self.lal_log_port = lal_log_port
         self.laser_alignment = None
         self.serial_scanner = None
         self.run_task = utils.make_done_future()
@@ -81,6 +82,7 @@ class Runner:
             log=self.log,
             simulation_mode=self.simulation_mode,
             disable_microphone=self.disable_microphone,
+            port=self.lal_log_port,
         )
         self.serial_scanner = SerialTemperatureScanner(
             log=self.log, simulation_mode=self.simulation_mode

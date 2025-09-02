@@ -1,0 +1,1 @@
+Fixed Laser Alignment port argument for command line executable.
