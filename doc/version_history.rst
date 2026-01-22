@@ -1,3 +1,12 @@
+v0.4.1 (2026-01-22)
+===================
+
+Bug Fixes
+---------
+
+- Fixed Laser Alignment port argument for command line executable. (`OSW-980 <https://rubinobs.atlassian.net//browse/OSW-980>`_)
+
+
 v0.4.0 (2025-05-18)
 ===================
 
