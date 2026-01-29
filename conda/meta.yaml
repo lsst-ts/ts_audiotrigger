@@ -11,6 +11,7 @@ build:
   script: {{ PYTHON }} -m pip install --no-deps --ignore-installed .
   entry_points:
     - run_audiotrigger = lsst.ts.audiotrigger:execute_runner
+  string: "py{{ PY_VER | replace('.', '') }}{{ PKG_HASH }}_{{ PKG_BUILDNUM }}"
 
 test:
   requires:
@@ -35,7 +36,7 @@ requirements:
   run:
     - python {{ python }}
     - numpy
-    - scipy =1.11
+    - scipy =1.17
     - pigpio =1.78
     - python-sounddevice =0.5
     - ts-tcpip =2
